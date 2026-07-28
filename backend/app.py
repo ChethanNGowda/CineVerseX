@@ -13,7 +13,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 from config import Config
-from extensions import db, mail
+from extensions import db, mail, migrate
 
 from models.user import User
 from models.movie import Movie
@@ -75,6 +75,7 @@ app.config["MAIL_DEFAULT_SENDER"] = os.environ.get(
 configure_security(app)
 
 db.init_app(app)
+migrate.init_app(app, db)
 mail.init_app(app)
 
 login_manager = LoginManager()
@@ -184,7 +185,8 @@ def set_security_headers(response):
 
 
 with app.app_context():
-    initialize_app_data()
+    if os.environ.get("SKIP_STARTUP_INIT", "").lower() not in {"1", "true", "yes"}:
+        initialize_app_data()
 
 
 if __name__ == "__main__":

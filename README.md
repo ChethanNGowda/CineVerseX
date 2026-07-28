@@ -18,7 +18,7 @@ Live demo: https://cineversex.onrender.com
 | Area | Technology |
 | --- | --- |
 | Backend | Flask |
-| Database | SQLite with SQLAlchemy |
+| Database | PostgreSQL 17 with SQLAlchemy |
 | Authentication | Flask-Login, Google OAuth |
 | Email | Flask-Mail |
 | UI | Jinja templates, Bootstrap, custom CSS |
@@ -77,7 +77,8 @@ pip install -r requirements.txt
 
 ```env
 SECRET_KEY=change-me
-DATABASE_URL=sqlite:///cineversex.db
+# Optional for local development. If omitted, the app uses a local SQLite file at backend/cineversex.db.
+DATABASE_URL=postgresql://username:password@localhost:5432/cineversex
 
 GOOGLE_CLIENT_ID=your_google_client_id
 GOOGLE_CLIENT_SECRET=your_google_client_secret
@@ -91,7 +92,15 @@ MAIL_PASSWORD=your_app_password
 MAIL_DEFAULT_SENDER=your_email@example.com
 ```
 
-5. Run the app.
+5. Apply the database schema.
+
+```bash
+flask --app backend.app db upgrade
+```
+
+This applies the checked-in initial Alembic migration to PostgreSQL and creates the tables.
+
+6. Run the app.
 
 ```bash
 python backend/app.py
@@ -128,7 +137,7 @@ For Render or another production host:
 - Set the required environment variables in the host dashboard.
 - Use a strong `SECRET_KEY`.
 - Configure Google OAuth redirect URLs for the deployed domain.
-- Use a production database instead of the local SQLite file for real traffic.
+- Use a production PostgreSQL database instead of SQLite for real traffic.
 - Start the app with Gunicorn, for example:
 
 ```bash

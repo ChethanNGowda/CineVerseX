@@ -1,0 +1,3 @@
+Generic single-database configuration for Flask-Migrate.
+
+Run `flask --app backend.app db upgrade` to apply the baseline schema.
