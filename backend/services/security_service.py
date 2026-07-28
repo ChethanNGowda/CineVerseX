@@ -60,6 +60,9 @@ def validate_csrf_request():
     if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
         return None
 
+    if request.path.startswith("/api/"):
+        return None
+
     if request.endpoint and request.endpoint.startswith("api_bp."):
         return None
 

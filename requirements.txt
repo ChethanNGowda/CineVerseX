@@ -11,3 +11,4 @@ gunicorn
 Flask-Mail
 python-dotenv
 psycopg2-binary
+requests

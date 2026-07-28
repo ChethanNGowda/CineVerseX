@@ -7,7 +7,7 @@ from urllib.parse import parse_qs, quote_plus, urlencode, urlparse
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
-from flask import Blueprint, Response, flash, render_template, request, current_app, redirect, session, url_for
+from flask import Blueprint, Response, flash, jsonify, render_template, request, current_app, redirect, session, url_for
 from flask_login import current_user
 from sqlalchemy import func, or_
 from werkzeug.utils import secure_filename
@@ -20,6 +20,15 @@ from models.show import Show
 from models.theater import Theater
 from services.activity_service import log_activity
 from services.catalog_data import BOOKMYSHOW_HOME_URL, BOOKMYSHOW_MOVIE_PAGES, FEATURED_MOVIE_DETAILS
+from services.catalog_sync_service import import_posters_for_all_movies
+from services.tmdb_service import (
+    TMDBConfigError,
+    TMDBServiceError,
+    TMDBUnauthorizedError,
+    TMDBUnavailableError,
+    fetch_movie_details_by_id,
+    search_best_movie_details,
+)
 
 movie_bp = Blueprint("movie_bp", __name__)
 
@@ -1329,6 +1338,187 @@ def search_movies():
         selected_rating=selected_rating,
         is_admin=is_admin
     )
+
+
+@movie_bp.route("/admin/movies/posters/import", methods=["POST"])
+@admin_required
+def admin_import_movie_posters():
+    payload = request.get_json(silent=True) if request.is_json else (request.form or {})
+    overwrite_value = str(payload.get("overwrite", "")).strip().lower()
+    limit_value = str(payload.get("limit", "")).strip()
+
+    overwrite_existing = overwrite_value in {"1", "true", "yes", "on"}
+
+    try:
+        limit = int(limit_value) if limit_value else None
+    except ValueError:
+        limit = None
+
+    stats = import_posters_for_all_movies(
+        overwrite_existing=overwrite_existing,
+        limit=limit,
+    )
+
+    if not stats.get("configured"):
+        message = "TMDB API key is not configured. Set TMDB_API_KEY in your .env file."
+
+        if request.is_json:
+            return jsonify({"error": message}), 500
+
+        flash(message, "danger")
+        return redirect(request.referrer or url_for("movie_bp.add_movie"))
+
+    log_activity(
+        "Movie Posters Synced",
+        (
+            f"processed={stats['processed']}, updated={stats['updated']}, "
+            f"skipped={stats['skipped']}, failed={stats['failed']}, overwrite={overwrite_existing}"
+        ),
+        notify=True,
+    )
+
+    if request.is_json:
+        return jsonify(stats)
+
+    flash(
+        (
+            "Poster import finished: "
+            f"processed {stats['processed']}, updated {stats['updated']}, "
+            f"skipped {stats['skipped']}, failed {stats['failed']}."
+        ),
+        "success" if stats["failed"] == 0 else "warning",
+    )
+    return redirect(request.referrer or url_for("movie_bp.movies"))
+
+
+@movie_bp.route("/api/movies/search", methods=["POST"])
+@admin_required
+def api_search_movie():
+    payload = request.get_json(silent=True) or {}
+    query = (payload.get("query") or "").strip()
+
+    if not query:
+        return jsonify({"error": "Query is required."}), 400
+
+    try:
+        details = search_best_movie_details(query, language="en-US")
+    except TMDBConfigError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except TMDBUnauthorizedError as exc:
+        return jsonify({"error": str(exc)}), 401
+    except TMDBUnavailableError as exc:
+        return jsonify({"error": str(exc)}), 503
+    except TMDBServiceError as exc:
+        return jsonify({"error": str(exc)}), 502
+
+    if not details:
+        return jsonify({"error": "Movie not found."}), 404
+
+    return jsonify(
+        {
+            "tmdb_id": details.get("tmdb_id"),
+            "title": details.get("title", ""),
+            "poster": details.get("poster", ""),
+            "description": details.get("description", ""),
+            "genres": details.get("genres", []),
+            "release_date": details.get("release_date", ""),
+            "rating": details.get("rating", 0),
+            "runtime": details.get("runtime", 0),
+            "language": details.get("language", ""),
+            "backdrop": details.get("backdrop", ""),
+        }
+    )
+
+
+@movie_bp.route("/api/movies/import", methods=["POST"])
+@admin_required
+def api_import_movie():
+    payload = request.get_json(silent=True) or {}
+    tmdb_id = payload.get("tmdb_id")
+
+    if tmdb_id is None:
+        return jsonify({"error": "tmdb_id is required."}), 400
+
+    try:
+        tmdb_id = int(tmdb_id)
+    except (TypeError, ValueError):
+        return jsonify({"error": "tmdb_id must be a valid integer."}), 400
+
+    existing_by_tmdb = Movie.query.filter_by(tmdb_id=tmdb_id).first()
+    if existing_by_tmdb:
+        return jsonify(
+            {
+                "error": "Duplicate movie.",
+                "movie_id": existing_by_tmdb.id,
+                "title": existing_by_tmdb.title,
+            }
+        ), 409
+
+    try:
+        details = fetch_movie_details_by_id(tmdb_id, language="en-US")
+    except TMDBConfigError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except TMDBUnauthorizedError as exc:
+        return jsonify({"error": str(exc)}), 401
+    except TMDBUnavailableError as exc:
+        return jsonify({"error": str(exc)}), 503
+    except TMDBServiceError as exc:
+        return jsonify({"error": str(exc)}), 502
+
+    title = (details.get("title") or "").strip()
+    if not title:
+        return jsonify({"error": "TMDB returned incomplete movie data."}), 502
+
+    existing_by_title = Movie.query.filter(func.lower(Movie.title) == title.lower()).first()
+    if existing_by_title:
+        return jsonify(
+            {
+                "error": "Duplicate movie.",
+                "movie_id": existing_by_title.id,
+                "title": existing_by_title.title,
+            }
+        ), 409
+
+    movie = Movie(
+        title=title,
+        description=details.get("description") or "",
+        poster_url=details.get("poster") or "",
+        backdrop_url=details.get("backdrop") or "",
+        release_date=details.get("release_date") or "",
+        runtime_minutes=details.get("runtime") or None,
+        language=details.get("language") or "",
+        rating=float(details.get("rating") or 0),
+        genre=", ".join(details.get("genres") or []),
+        tmdb_id=tmdb_id,
+        tmdb_url=f"https://www.themoviedb.org/movie/{tmdb_id}",
+        data_source="tmdb",
+    )
+
+    db.session.add(movie)
+    db.session.commit()
+
+    log_activity("Movie Added", f"Imported movie from TMDB API: {movie.title}", notify=True)
+
+    return jsonify(
+        {
+            "message": "Movie imported successfully.",
+            "movie": {
+                "id": movie.id,
+                "tmdb_id": movie.tmdb_id,
+                "title": movie.title,
+                "poster": movie.poster_url,
+                "description": movie.description,
+                "genres": details.get("genres") or [],
+                "release_date": movie.release_date,
+                "rating": movie.rating,
+                "runtime": movie.runtime_minutes,
+                "language": movie.language,
+                "backdrop": movie.backdrop_url,
+            },
+        }
+    ), 201
+
+
 @movie_bp.route("/edit-movie/<int:movie_id>", methods=["GET", "POST"])
 @admin_required
 def edit_movie(movie_id):

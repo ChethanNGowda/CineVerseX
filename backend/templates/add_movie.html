@@ -38,6 +38,35 @@
         </form>
     </section>
 
+    <section class="cx-import-panel cx-import-panel-secondary">
+        <div>
+            <span class="eyebrow">Catalog Upgrade</span>
+            <h2>Import posters for your existing movie library</h2>
+            <p>
+                Pull TMDB posters and backdrops for movies in your database.
+                Use missing-only mode for safe enrichment, or refresh mode to update all artwork.
+            </p>
+        </div>
+
+        <div class="cx-bulk-actions">
+            <form method="POST" action="{{ url_for('movie_bp.admin_import_movie_posters') }}" class="cx-inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="overwrite" value="0">
+                <button class="btn btn-outline-info" type="submit">
+                    <i class="fas fa-images"></i> Import Missing Posters
+                </button>
+            </form>
+
+            <form method="POST" action="{{ url_for('movie_bp.admin_import_movie_posters') }}" class="cx-inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="overwrite" value="1">
+                <button class="btn btn-outline-warning" type="submit">
+                    <i class="fas fa-arrows-rotate"></i> Refresh All Posters
+                </button>
+            </form>
+        </div>
+    </section>
+
     <section class="cx-manual-panel">
         <div class="cx-section-head">
             <div>

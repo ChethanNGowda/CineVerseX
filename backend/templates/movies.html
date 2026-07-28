@@ -25,11 +25,42 @@
         </div>
 
         {% if session.get('user_role') == 'admin' %}
-        <a href="/add-movie" class="btn btn-primary">
-            <i class="fas fa-plus"></i> Add Movie
-        </a>
+        <div class="cx-admin-head-actions">
+            <a href="/add-movie" class="btn btn-primary">
+                <i class="fas fa-plus"></i> Add Movie
+            </a>
+
+            <form method="POST" action="{{ url_for('movie_bp.admin_import_movie_posters') }}" class="cx-inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="overwrite" value="0">
+                <button type="submit" class="btn btn-outline-info">
+                    <i class="fas fa-images"></i> Import Missing Posters
+                </button>
+            </form>
+
+            <form method="POST" action="{{ url_for('movie_bp.admin_import_movie_posters') }}" class="cx-inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="overwrite" value="1">
+                <button type="submit" class="btn btn-outline-warning">
+                    <i class="fas fa-arrows-rotate"></i> Refresh All Posters
+                </button>
+            </form>
+        </div>
         {% endif %}
     </div>
+
+    <section class="cx-premium-banner">
+        <div>
+            <span class="eyebrow">Discover Faster</span>
+            <h2>Smarter movie browsing with richer posters, cleaner cards, and quick actions.</h2>
+            <p>Use filters and quick view to curate your catalog quickly. Admin tools now include one-click poster import from TMDB.</p>
+        </div>
+        <div class="cx-premium-badges">
+            <span><i class="fas fa-bolt"></i> Fast filters</span>
+            <span><i class="fas fa-panorama"></i> Better artwork</span>
+            <span><i class="fas fa-wand-magic-sparkles"></i> Quick import</span>
+        </div>
+    </section>
 
     <div class="cx-movie-toolbar" data-movie-toolbar>
         <label class="cx-page-search">

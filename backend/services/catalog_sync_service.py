@@ -474,6 +474,81 @@ def backfill_missing_movie_posters(limit=80):
     return bool(updated)
 
 
+def import_posters_for_all_movies(overwrite_existing=False, limit=None):
+    if not tmdb_is_configured():
+        return {
+            "configured": False,
+            "processed": 0,
+            "updated": 0,
+            "skipped": 0,
+            "failed": 0,
+        }
+
+    query = Movie.query.order_by(Movie.title.asc())
+
+    if limit and int(limit) > 0:
+        query = query.limit(int(limit))
+
+    movies = query.all()
+    stats = {
+        "configured": True,
+        "processed": 0,
+        "updated": 0,
+        "skipped": 0,
+        "failed": 0,
+    }
+
+    for movie in movies:
+        stats["processed"] += 1
+
+        has_poster = bool((movie.poster_url or "").strip())
+        has_backdrop = bool((movie.backdrop_url or "").strip())
+
+        if not overwrite_existing and has_poster and has_backdrop:
+            stats["skipped"] += 1
+            continue
+
+        try:
+            match = fetch_tmdb_image_match(movie.title, movie.release_date)
+        except Exception as error:
+            print(f"TMDb poster lookup failed for {movie.title}: {error}")
+            stats["failed"] += 1
+            continue
+
+        if not match:
+            stats["skipped"] += 1
+            continue
+
+        changed = False
+
+        if overwrite_existing or not has_poster:
+            new_poster = match.get("poster_url") or ""
+
+            if new_poster and new_poster != (movie.poster_url or ""):
+                movie.poster_url = new_poster
+                changed = True
+
+        if overwrite_existing or not has_backdrop:
+            new_backdrop = match.get("backdrop_url") or match.get("poster_url") or ""
+
+            if new_backdrop and new_backdrop != (movie.backdrop_url or ""):
+                movie.backdrop_url = new_backdrop
+                changed = True
+
+        if match.get("tmdb_id") and not movie.tmdb_id:
+            movie.tmdb_id = match["tmdb_id"]
+            movie.tmdb_url = f"https://www.themoviedb.org/movie/{match['tmdb_id']}"
+            changed = True
+
+        if changed:
+            stats["updated"] += 1
+        else:
+            stats["skipped"] += 1
+
+    db.session.commit()
+    return stats
+
+
 def sync_theater_network():
     for old_name, (new_name, new_city, new_address) in THEATER_RENAMES.items():
         old_theater = Theater.query.filter_by(name=old_name).first()
