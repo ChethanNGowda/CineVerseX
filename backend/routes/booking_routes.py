@@ -107,149 +107,16 @@ def seat_price(base_price, seat):
 
 @booking_bp.route("/show/<int:show_id>/seats")
 def seat_selection(show_id):
+    """Send customers to the cinema ticketing provider instead of fake seat inventory."""
     show = Show.query.get_or_404(show_id)
-    settings = get_settings()
-    grouped_seats = screen_seats(show.screen)
-    seats = [seat for group in grouped_seats.values() for seat in group]
-    booked_seats = []
-
-    for booking in Booking.query.filter(
-        Booking.show_id == show.id,
-        Booking.status.in_(ACTIVE_BOOKING_STATUSES)
-    ).all():
-        booked_seats.extend((booking.seats or "").split(","))
-
-    return render_template(
-        "seat_selection.html",
-        show=show,
-        settings=settings,
-        grouped_seats=grouped_seats,
-        seats=seats,
-        booked_seats=booked_seats,
-        seat_prices={seat: seat_price(show.price, seat) for seat in seats},
-        bookmyshow_url=effective_bookmyshow_url(show.movie),
-    )
+    return redirect(effective_bookmyshow_url(show.movie))
 
 
 @booking_bp.route("/book/<int:show_id>", methods=["POST"])
-@login_required
 def book_ticket(show_id):
-    settings = get_settings()
-
-    if not settings.booking_enabled:
-        flash("Bookings are currently disabled by admin.", "warning")
-        return redirect(url_for("movie_bp.movies"))
-
+    """Legacy booking endpoint: never create an unverified local payment or ticket."""
     show = Show.query.get_or_404(show_id)
-    movie_name = show.movie.title if show.movie else "Unknown Movie"
-    theatre_name = show.theater.name if show.theater else "Unknown Theatre"
-
-    seats = request.form["seats"]
-
-    if not seats:
-        return "Please select at least one seat"
-
-    selected_seats = seats.split(",")
-    selected_seats = [seat for seat in selected_seats if seat]
-
-    if len(selected_seats) > settings.max_seats_per_booking:
-        flash(
-            f"Maximum {settings.max_seats_per_booking} seats allowed per booking.",
-            "danger"
-        )
-        return redirect(url_for("booking_bp.seat_selection", show_id=show.id))
-
-    subtotal = sum(seat_price(show.price, seat) for seat in selected_seats)
-    tax_amount = subtotal * (settings.tax_percentage or 0) / 100
-    expected_total = subtotal + float(settings.booking_fee or 0) + tax_amount
-    total_amount = round(expected_total, 2)
-
-    existing_bookings = Booking.query.filter(
-        Booking.show_id == show.id,
-        Booking.status.in_(ACTIVE_BOOKING_STATUSES)
-    ).all()
-
-    booked_seats = []
-
-    for booking in existing_bookings:
-        booked_seats.extend(booking.seats.split(","))
-
-    for seat in selected_seats:
-        if seat in booked_seats:
-            return f"Seat {seat} is already booked"
-
-    booking = Booking(
-        user_id=session["user_id"],
-        show_id=show.id,
-        seats=seats,
-        total_amount=total_amount,
-        status="Booked"
-    )
-
-    db.session.add(booking)
-    db.session.commit()
-    log_activity("Payment Success", f"Payment recorded for booking #{booking.id}.", notify=True)
-
-    payment = Payment(
-        booking_id=booking.id,
-        user_id=session["user_id"],
-        amount=total_amount,
-        method=request.form.get("payment_method", "UPI"),
-        status="success",
-        receipt_number=f"CX-{datetime.utcnow().strftime('%Y%m%d')}-{uuid4().hex[:8].upper()}",
-        provider_reference=f"pay_{uuid4().hex[:14]}"
-    )
-
-    db.session.add(payment)
-    db.session.commit()
-
-    ticket = Ticket(
-        user_id=session["user_id"],
-        booking_id=booking.id,
-        movie_name=movie_name,
-        theatre_name=theatre_name,
-        show_time=show.show_time,
-        seat_numbers=seats,
-        total_amount=total_amount,
-        status="Booked"
-    )
-
-    db.session.add(ticket)
-    db.session.commit()
-
-    qr_data = (
-        f"Ticket ID: {ticket.id}\n"
-        f"Movie: {ticket.movie_name}\n"
-        f"Theatre: {ticket.theatre_name}\n"
-        f"Show Time: {ticket.show_time}\n"
-        f"Seats: {ticket.seat_numbers}\n"
-        f"Amount: Rs. {ticket.total_amount}"
-    )
-
-    qr_folder = os.path.join(
-        current_app.root_path,
-        "static",
-        "qrcodes"
-    )
-
-    os.makedirs(qr_folder, exist_ok=True)
-
-    qr_filename = f"ticket_{ticket.id}.png"
-    qr_path = os.path.join(qr_folder, qr_filename)
-
-    qr_img = qrcode.make(qr_data)
-    qr_img.save(qr_path)
-
-    ticket.qr_code = f"qrcodes/{qr_filename}"
-
-    db.session.commit()
-
-    user = db.session.get(User, session["user_id"])
-    if user:
-        send_ticket_email(user, booking, ticket)
-    log_activity("Ticket Booked", f"Booking #{booking.id} for {movie_name}, seats {seats}.", notify=True)
-
-    return redirect(url_for("ticket_bp.my_tickets"))
+    return redirect(effective_bookmyshow_url(show.movie))
 
 
 @booking_bp.route("/cancel-ticket/<int:booking_id>", methods=["POST"])
