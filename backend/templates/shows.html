@@ -93,7 +93,10 @@
 
                 <div class="cx-card-actions">
                     <a href="{{ url_for('movie_bp.movie_details', movie_id=movie.id) }}">Details</a>
-                    <a href="https://in.bookmyshow.com/" target="_blank" rel="noopener noreferrer">Search on BookMyShow</a>
+                    <a href="{{ url_for('movie_bp.bookmyshow_movie_redirect', movie_id=movie.id) }}" target="_blank" rel="noopener noreferrer">BookMyShow</a>
+                    <a href="https://www.district.in/movies" target="_blank" rel="noopener noreferrer">District</a>
+                    <a href="https://www.pvrcinemas.com/" target="_blank" rel="noopener noreferrer">PVR INOX</a>
+                    <a href="https://www.cinepolisindia.com/" target="_blank" rel="noopener noreferrer">Cinépolis</a>
                     <a
                         href="{{ movie.justwatch_url or 'https://www.justwatch.com/in/search?q=' ~ movie.title|urlencode }}"
                         target="_blank"

@@ -43,6 +43,28 @@
                         <i class="fas fa-tv"></i> JustWatch
                     </a>
 
+                    <a class="btn btn-primary btn-lg" href="{{ url_for('movie_bp.bookmyshow_movie_redirect', movie_id=movie.id) }}" target="_blank" rel="noopener noreferrer">
+                        <i class="fas fa-ticket-alt"></i> Book on BookMyShow
+                    </a>
+
+                    <a class="btn btn-outline-light btn-lg" href="https://www.district.in/movies" target="_blank" rel="noopener noreferrer" title="Open District to search for this movie">
+                        <i class="fas fa-ticket-alt"></i> District
+                    </a>
+
+                    <a class="btn btn-outline-light btn-lg" href="https://www.pvrcinemas.com/" target="_blank" rel="noopener noreferrer" title="Open PVR INOX to check movie showtimes">
+                        <i class="fas fa-film"></i> PVR INOX
+                    </a>
+
+                    <a class="btn btn-outline-light btn-lg" href="https://www.cinepolisindia.com/" target="_blank" rel="noopener noreferrer" title="Open Cinépolis to check movie showtimes">
+                        <i class="fas fa-film"></i> Cinépolis
+                    </a>
+
+                    {% if movie.tmdb_id %}
+                    <a class="btn btn-outline-light btn-lg" href="https://www.themoviedb.org/movie/{{ movie.tmdb_id }}" target="_blank" rel="noopener noreferrer">
+                        <i class="fas fa-circle-info"></i> TMDB
+                    </a>
+                    {% endif %}
+
                     {% if session.get("user_id") %}
                     <a class="btn btn-outline-light btn-lg" href="{{ url_for('wishlist_bp.add_to_wishlist', movie_id=movie.id) }}">
                         <i class="fas fa-heart"></i> Wishlist
